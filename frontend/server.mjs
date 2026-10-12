@@ -23,12 +23,18 @@ app.get("/", (_req, res) => {
   <h1>LaunchDarkly Auto-Factory — Demo</h1>
   <p>Frontend deployed SHA: <code>${SHA}</code></p>
   <p id="greeting">Loading greeting from backend…</p>
+  <p id="backend-status">Checking backend status…</p>
   <script>
     fetch("${BACKEND_URL}/api/greeting")
       .then(r => r.json())
       .then(d => { document.getElementById("greeting").textContent =
         d.greeting + "  (new-greeting flag: " + d.flag_new_greeting + ")"; })
       .catch(() => { document.getElementById("greeting").textContent = "backend unavailable"; });
+    fetch("${BACKEND_URL}/api/status")
+      .then(r => r.json())
+      .then(d => { document.getElementById("backend-status").textContent =
+        "Backend online: " + d.service + " version " + d.version; })
+      .catch(() => { document.getElementById("backend-status").textContent = "Backend offline"; });
   </script>
 </body></html>`);
 });
