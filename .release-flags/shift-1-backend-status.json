@@ -2,6 +2,15 @@
   "schemaVersion": "1.2",
   "flagKey": "enable-backend-status",
   "scope": "frontend",
-  "releasePlan": {},
+  "targetVariation": "v1",
+  "releasePlan": {
+    "metricKeys": [
+      "enable-backend-status-error-rate",
+      "enable-backend-status-latency",
+      "enable-backend-status-success-rate"
+    ],
+    "randomizationUnit": "user",
+    "notes": "Roles: enable-backend-status-error-rate = killswitch; enable-backend-status-latency = pause (two-armed — the page handler reports its render duration on control and v1 alike); enable-backend-status-success-rate = monitoring (one-armed — only the v1 page beacons an outcome, so control produces no comparison). The frontend has no OTel or LaunchDarkly observability SDK, so track() is the only valid backing and span_coverage is none; no observability package was installed. sentry-errors-binary / sentry-errors-count were considered and rejected as global guardrails: only the Flask backend initializes Sentry, so this frontend service can never emit them."
+  },
   "releaseIntent": {}
 }

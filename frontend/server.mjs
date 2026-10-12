@@ -6,6 +6,11 @@
  * The backend-status line on the page is gated by the LaunchDarkly flag
  * "enable-backend-status": "control" (the fail-safe default) renders the page
  * exactly as it was before, "v1" adds the status line.
+ *
+ * Guarded-release telemetry: the page handler reports its render duration on
+ * BOTH variations (so the latency comparison is two-armed), and the v1 page
+ * beacons the outcome of its /api/status fetch back to this server, which
+ * turns it into a LaunchDarkly custom event.
  */
 
 import express from "express";
@@ -15,6 +20,7 @@ const SHA = process.env.RAILWAY_GIT_COMMIT_SHA || "dev";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export const FLAG_KEY = "enable-backend-status";
+export const TELEMETRY_PATH = "/api/telemetry/backend-status";
 const LD_CONTEXT = { kind: "user", key: "demo-user" };
 
 /**
@@ -54,6 +60,16 @@ async function evaluateVariation(ldClient) {
   }
 }
 
+/** Telemetry must never be able to fail a request. */
+function emit(ldClient, eventKey, metricValue) {
+  if (!ldClient) return;
+  try {
+    ldClient.track(eventKey, LD_CONTEXT, undefined, metricValue);
+  } catch {
+    /* ignore */
+  }
+}
+
 function renderPage({ sha, backendUrl, showBackendStatus }) {
   const statusParagraph = showBackendStatus
     ? `\n  <p id="backend-status">Checking backend status…</p>`
@@ -63,8 +79,11 @@ function renderPage({ sha, backendUrl, showBackendStatus }) {
     fetch("${backendUrl}/api/status")
       .then(r => r.json())
       .then(d => { document.getElementById("backend-status").textContent =
-        "Backend online: " + d.service + " version " + d.version; })
-      .catch(() => { document.getElementById("backend-status").textContent = "Backend offline"; });`
+        "Backend online: " + d.service + " version " + d.version; report("ok"); })
+      .catch(() => { document.getElementById("backend-status").textContent = "Backend offline"; report("error"); });
+    function report(outcome) {
+      try { navigator.sendBeacon("${TELEMETRY_PATH}", JSON.stringify({ outcome: outcome })); } catch (e) {}
+    }`
     : "";
 
   return `<!doctype html>
@@ -91,9 +110,26 @@ export function createApp({ ldClient = null, sha = SHA, backendUrl = BACKEND_URL
   });
 
   app.get("/", async (_req, res) => {
+    const startedAt = Date.now();
     const variation = await evaluateVariation(ldClient);
     const showBackendStatus = variation === "v1";
     res.type("html").send(renderPage({ sha, backendUrl, showBackendStatus }));
+    // Emitted on both variations so the latency guardrail is a real comparison.
+    emit(ldClient, "enable-backend-status-latency", Date.now() - startedAt);
+  });
+
+  // navigator.sendBeacon posts a Blob, so parse the body by hand rather than
+  // letting express.json() reject it with a 400.
+  app.post(TELEMETRY_PATH, express.text({ type: "*/*", limit: "1kb" }), (req, res) => {
+    let outcome = null;
+    try {
+      outcome = JSON.parse(req.body)?.outcome;
+    } catch {
+      /* malformed beacon: drop it */
+    }
+    if (outcome === "ok") emit(ldClient, "enable-backend-status-success");
+    else if (outcome === "error") emit(ldClient, "enable-backend-status-error");
+    res.status(204).end();
   });
 
   return app;
