@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.2",
+  "flagKey": "enable-backend-status",
+  "targetVariation": "v1",
+  "releasePlan": {
+    "metricKeys": [
+      "enable-backend-status-error-rate",
+      "enable-backend-status-latency"
+    ],
+    "randomizationUnit": "user"
+  },
+  "releaseIntent": {}
+}
