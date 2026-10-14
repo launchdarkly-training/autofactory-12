@@ -18,8 +18,8 @@ conventions** — it does not restate each phase's rules.
   `get-flag-status-across-environments`, the metric-creation tool, and
   flag/AI-config tools).
 - Project keys:
-  - **Factory project** (holds the agent instructions): `auto-factory-prototype`
-  - **App project** (where flags + metrics are created): `autofactory-demo`
+  - **Factory project** (holds the agent instructions): `improved-arachnid`
+  - **App project** (where flags + metrics are created): `improved-arachnid`
   - If your setup differs, substitute accordingly.
 
 ## The change set
@@ -159,8 +159,8 @@ Edits stay in the working tree (nothing committed/pushed). End with a summary:
 
 - the **flag action executed** (`create` | `extend_variation` | `ride_existing`
   | `child_flag` | `none`) and the **target variation** (`vN`)
-- the flag key (and a link: `https://app.launchdarkly.com/autofactory-demo/~/features/<flag-key>`)
-- the metric keys created or reused (links: `https://app.launchdarkly.com/autofactory-demo/metrics/<metric-key>/details`)
+- the flag key (and a link: `https://app.launchdarkly.com/improved-arachnid/~/features/<flag-key>`)
+- the metric keys created or reused (links: `https://app.launchdarkly.com/improved-arachnid/metrics/<metric-key>/details`)
 - the manifest path written
 - the review **verdict** and **risk level** as a fenced JSON block:
   ```json
