@@ -23,12 +23,18 @@ app.get("/", (_req, res) => {
   <h1>LaunchDarkly Auto-Factory — Demo</h1>
   <p>Frontend deployed SHA: <code>${SHA}</code></p>
   <p id="greeting">Loading greeting from backend…</p>
+  <button id="refresh" type="button">Refresh greeting</button>
   <script>
-    fetch("${BACKEND_URL}/api/greeting")
-      .then(r => r.json())
-      .then(d => { document.getElementById("greeting").textContent =
-        d.greeting + "  (new-greeting flag: " + d.flag_new_greeting + ")"; })
-      .catch(() => { document.getElementById("greeting").textContent = "backend unavailable"; });
+    function loadGreeting() {
+      document.getElementById("greeting").textContent = "Loading greeting from backend…";
+      fetch("${BACKEND_URL}/api/greeting")
+        .then(r => r.json())
+        .then(d => { document.getElementById("greeting").textContent =
+          d.greeting + "  (new-greeting flag: " + d.flag_new_greeting + ")"; })
+        .catch(() => { document.getElementById("greeting").textContent = "backend unavailable"; });
+    }
+    loadGreeting();
+    document.getElementById("refresh").addEventListener("click", loadGreeting);
   </script>
 </body></html>`);
 });
