@@ -9,6 +9,11 @@
  * serves the page with the refresh button. Evaluation fails safe to `control`,
  * so an absent SDK key, an unreachable LaunchDarkly, or an absent flag all
  * keep the existing behavior.
+ *
+ * Guarded-release metrics: page render duration is tracked on BOTH variations
+ * (a real two-armed comparison), while refresh outcomes are reported by the v1
+ * page through POST /api/greeting-refresh-outcome and are therefore one-armed —
+ * a control user has no button to click.
  */
 
 import express from "express";
@@ -20,6 +25,7 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export const FLAG_KEY = "enable-greeting-refresh";
 export const LD_CONTEXT = { kind: "user", key: "demo-user" };
+export const OUTCOME_PATH = "/api/greeting-refresh-outcome";
 
 /**
  * Build the LaunchDarkly client, or return null when LD is unavailable. Mirrors
@@ -55,6 +61,20 @@ async function greetingRefreshVariation(ldClient) {
   }
 }
 
+/**
+ * Emit a guarded-release event. Event keys are written as literal strings at
+ * every call site on purpose: the release tooling and LaunchDarkly code
+ * references both find metrics by grepping for the exact key.
+ */
+function emit(ldClient, eventKey, metricValue) {
+  if (!ldClient) return;
+  try {
+    ldClient.track(eventKey, LD_CONTEXT, undefined, metricValue);
+  } catch {
+    // telemetry must never fail a request
+  }
+}
+
 function renderPage({ buttonHtml, scriptBody }) {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Auto-Factory Demo</title></head>
@@ -82,16 +102,19 @@ function renderControlPage() {
 function renderRefreshPage() {
   return renderPage({
     buttonHtml: `  <button id="refresh" type="button">Refresh greeting</button>\n`,
-    scriptBody: `    function loadGreeting() {
+    scriptBody: `    function reportRefresh(outcome) {
+      try { navigator.sendBeacon("${OUTCOME_PATH}", JSON.stringify({ outcome: outcome })); } catch (e) {}
+    }
+    function loadGreeting(report) {
       document.getElementById("greeting").textContent = "Loading greeting from backend…";
       fetch("${BACKEND_URL}/api/greeting")
         .then(r => r.json())
         .then(d => { document.getElementById("greeting").textContent =
-          d.greeting + "  (new-greeting flag: " + d.flag_new_greeting + ")"; })
-        .catch(() => { document.getElementById("greeting").textContent = "backend unavailable"; });
+          d.greeting + "  (new-greeting flag: " + d.flag_new_greeting + ")"; if (report) reportRefresh("ok"); })
+        .catch(() => { document.getElementById("greeting").textContent = "backend unavailable"; if (report) reportRefresh("error"); });
     }
-    loadGreeting();
-    document.getElementById("refresh").addEventListener("click", loadGreeting);
+    loadGreeting(false);
+    document.getElementById("refresh").addEventListener("click", function () { loadGreeting(true); });
 `,
   });
 }
@@ -104,8 +127,25 @@ export function createApp({ ldClient = null } = {}) {
   });
 
   app.get("/", async (_req, res) => {
+    const startedAt = Date.now();
     const variation = await greetingRefreshVariation(ldClient);
     res.type("html").send(variation === "v1" ? renderRefreshPage() : renderControlPage());
+    emit(ldClient, "enable-greeting-refresh-latency", Date.now() - startedAt);
+  });
+
+  // The v1 page reports each refresh outcome here via navigator.sendBeacon,
+  // which posts a Blob — hence text parsing rather than express.json, which
+  // would 400 on a malformed body instead of ignoring it.
+  app.post(OUTCOME_PATH, express.text({ type: "*/*", limit: "1kb" }), (req, res) => {
+    let outcome;
+    try {
+      outcome = JSON.parse(req.body)?.outcome;
+    } catch {
+      outcome = undefined;
+    }
+    if (outcome === "ok") emit(ldClient, "enable-greeting-refresh-success");
+    else if (outcome === "error") emit(ldClient, "enable-greeting-refresh-error");
+    res.status(204).end();
   });
 
   return app;
