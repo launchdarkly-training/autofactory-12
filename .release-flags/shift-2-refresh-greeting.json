@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.2",
+  "flagKey": "enable-greeting-refresh",
+  "scope": "frontend",
+  "targetVariation": "v1",
+  "releasePlan": {},
+  "releaseIntent": {}
+}
